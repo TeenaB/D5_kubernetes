@@ -1,0 +1,55 @@
+name: CI – Minikube Deploy
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  minikube-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Set up Minikube
+        uses: manusa/actions-setup-minikube@v2
+        with:
+          minikube-version: 'latest'
+          kubernetes-version: 'latest'
+          driver: docker
+
+      - name: Wait for cluster
+        run: |
+          kubectl wait --for=condition=Ready nodes --all --timeout=120s
+
+      - name: Deploy to Minikube
+        run: |
+          kubectl apply -f deployment.yaml
+          kubectl apply -f service.yaml
+
+      - name: Verify Pods & Service
+        run: |
+          kubectl get pods -o wide
+          kubectl get svc demo-service
+
+      - name: Scale up
+        run: kubectl scale deployment/demo-deployment --replicas=3
+
+      - name: Describe Deployment
+        run: |
+          kubectl describe deployment/demo-deployment
+          kubectl logs deployment/demo-deployment
+
+      # Optional teardown (cleanup)
+      - if: ${{ github.event.head_commit.message == 'destroy' }}
+        run: |
+          kubectl delete -f service.yaml
+          kubectl delete -f deployment.yaml
